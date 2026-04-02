@@ -23,8 +23,10 @@ from it with minor modificatioons. Please check the file copyright
 headers for the origins of the files.
 
 If you already include LockClock with your ROM you should
-consider if you really need this. The provider API is similiar
-and you dont need two different providers.
+consider if you really need it. The provider API is similiar
+and you dont need two different providers. OmniJaws is much better
+maintained and does not rely on deprecated (and removed!) code from
+the LineageOS SDK
 
 The default condition icon pack has also been extracted from
 LockClock

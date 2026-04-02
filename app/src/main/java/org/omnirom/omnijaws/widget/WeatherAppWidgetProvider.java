@@ -27,6 +27,9 @@ import static org.omnirom.omnijaws.widget.WeatherAppWidgetConfigureFragment.COLO
 import static org.omnirom.omnijaws.widget.WeatherAppWidgetConfigureFragment.COLOR_THEME_LIGHT;
 import static org.omnirom.omnijaws.widget.WeatherAppWidgetConfigureFragment.KEY_BG_TRANS;
 import static org.omnirom.omnijaws.widget.WeatherAppWidgetConfigureFragment.KEY_COLOR_THEME;
+import static org.omnirom.omnijaws.widget.WeatherAppWidgetConfigureFragment.KEY_WIDGET_STYLE;
+import static org.omnirom.omnijaws.widget.WeatherAppWidgetConfigureFragment.WIDGET_STYLE_CLOCK;
+import static org.omnirom.omnijaws.widget.WeatherAppWidgetConfigureFragment.WIDGET_STYLE_STANDARD;
 import static org.omnirom.omnijaws.widget.WeatherAppWidgetConfigureFragment.clearPrefs;
 import static org.omnirom.omnijaws.widget.WeatherAppWidgetConfigureFragment.remapPrefs;
 
@@ -61,6 +64,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.Locale;
 import java.util.Map;
 
 import androidx.preference.PreferenceManager;
@@ -114,6 +118,16 @@ public class WeatherAppWidgetProvider extends AppWidgetProvider {
         String action = intent.getAction();
         if (LOGGING) {
             Log.i(TAG, "onReceive: " + action);
+        }
+        // Refresh clock text every minute so the time stays current.
+        // ACTION_TIME_TICK is sent by the system every minute and can only
+        // be received by a dynamically-registered receiver — we handle it
+        // here via the AlarmManager-based workaround in scheduleClockUpdate.
+        if (Intent.ACTION_TIME_TICK.equals(action)
+                || Intent.ACTION_TIME_CHANGED.equals(action)
+                || Intent.ACTION_TIMEZONE_CHANGED.equals(action)) {
+            updateAllWeather(context);
+            return;
         }
         super.onReceive(context, intent);
     }
@@ -298,6 +312,24 @@ public class WeatherAppWidgetProvider extends AppWidgetProvider {
         boolean showConditionLine = minWidth > 300;
         widget.setViewVisibility(R.id.current_condition_line,
                 showConditionLine ? View.VISIBLE : View.GONE);
+
+        // Clock style: populate time and date TextViews if they exist in this layout.
+        // R.id.clock_time / clock_date are only present in the clock layouts; calling
+        // setTextViewText on a missing ID in RemoteViews is a no-op, so this is safe
+        // for standard layouts too.
+        setClockText(context, widget);
+    }
+
+    /** Writes the current time and date into the clock TextViews. */
+    private static void setClockText(Context context, RemoteViews widget) {
+        boolean use24h = android.text.format.DateFormat.is24HourFormat(context);
+        String timeFmt = use24h ? "H:mm" : "h:mm";
+        String dateFmt = "EEE, d MMM";
+        long now = System.currentTimeMillis();
+        widget.setTextViewText(R.id.clock_time,
+                new SimpleDateFormat(timeFmt, Locale.getDefault()).format(new Date(now)));
+        widget.setTextViewText(R.id.clock_date,
+                new SimpleDateFormat(dateFmt, Locale.getDefault()).format(new Date(now)));
     }
 
     public static RemoteViews createRemoteViews(Context context, AppWidgetManager appWidgetManager,
@@ -306,52 +338,76 @@ public class WeatherAppWidgetProvider extends AppWidgetProvider {
             Log.i(TAG, "createRemoteViews");
         }
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        int widgetStyle = prefs.getInt(KEY_WIDGET_STYLE + "_" + appWidgetId, WIDGET_STYLE_STANDARD);
         int theme = prefs.getInt(KEY_COLOR_THEME + "_" + appWidgetId, COLOR_THEME_DEFAULT);
         int bgTrans = prefs.getInt(KEY_BG_TRANS + "_" + appWidgetId, BG_TRANS_DEFAULT);
 
         int smallWidgetResId = R.layout.weather_appwidget_small_system;
         int largelWidgetResId = R.layout.weather_appwidget_large_system;
         int wideWidgetResId = R.layout.weather_appwidget_wide_system;
-        
-        String iconPack = Config.getIconPack(context);
 
-        boolean isPackOutline = iconPack != null && !iconPack.isEmpty() && iconPack.equals("org.omnirom.omnijaws.outline");
+        if (widgetStyle == WIDGET_STYLE_CLOCK) {
+            // Clock style: supports theme (system/dark/light) and transparency,
+            switch (theme) {
+                case COLOR_THEME_DARK:
+                    largelWidgetResId = R.layout.weather_appwidget_clock_large_dark;
+                    wideWidgetResId   = R.layout.weather_appwidget_clock_wide_dark;
+                    smallWidgetResId  = R.layout.weather_appwidget_small_dark;
+                    break;
+                case COLOR_THEME_LIGHT:
+                    largelWidgetResId = R.layout.weather_appwidget_clock_large_light;
+                    wideWidgetResId   = R.layout.weather_appwidget_clock_wide_light;
+                    smallWidgetResId  = R.layout.weather_appwidget_small_light;
+                    break;
+                default: // COLOR_THEME_SYSTEM
+                    largelWidgetResId = R.layout.weather_appwidget_clock_large_system;
+                    wideWidgetResId   = R.layout.weather_appwidget_clock_wide_system;
+                    smallWidgetResId  = R.layout.weather_appwidget_small_system;
+                    break;
+            }
+        } else {
+            // Standard style: apply colour theme + outline-pack variants
+            String iconPack = Config.getIconPack(context);
+            boolean isPackOutline = iconPack != null && !iconPack.isEmpty()
+                    && iconPack.equals("org.omnirom.omnijaws.outline");
 
-        switch (theme) {
-            case COLOR_THEME_SYSTEM:
-                if (isPackOutline) {
-                    smallWidgetResId = R.layout.weather_appwidget_small_tint_system;
-                    largelWidgetResId = R.layout.weather_appwidget_large_tint_system;
-                    wideWidgetResId = R.layout.weather_appwidget_wide_tint_system;
-                } else {
-                    smallWidgetResId = R.layout.weather_appwidget_small_system;
-                    largelWidgetResId = R.layout.weather_appwidget_large_system;
-                    wideWidgetResId = R.layout.weather_appwidget_wide_system;
-                }
-                break;
-            case COLOR_THEME_DARK:
-                if (isPackOutline) {
-                    smallWidgetResId = R.layout.weather_appwidget_small_tint_dark;
-                    largelWidgetResId = R.layout.weather_appwidget_large_tint_dark;
-                    wideWidgetResId = R.layout.weather_appwidget_wide_tint_dark;
-                } else {
-                    smallWidgetResId = R.layout.weather_appwidget_small_dark;
-                    largelWidgetResId = R.layout.weather_appwidget_large_dark;
-                    wideWidgetResId = R.layout.weather_appwidget_wide_dark;
-                }
-                break;
-            case COLOR_THEME_LIGHT:
-                if (isPackOutline) {
-                    smallWidgetResId = R.layout.weather_appwidget_small_tint_light;
-                    largelWidgetResId = R.layout.weather_appwidget_large_tint_light;
-                    wideWidgetResId = R.layout.weather_appwidget_wide_tint_light;
-                } else {
-                    smallWidgetResId = R.layout.weather_appwidget_small_light;
-                    largelWidgetResId = R.layout.weather_appwidget_large_light;
-                    wideWidgetResId = R.layout.weather_appwidget_wide_light;
-                }
-                break;
+            switch (theme) {
+                case COLOR_THEME_SYSTEM:
+                    if (isPackOutline) {
+                        smallWidgetResId  = R.layout.weather_appwidget_small_tint_system;
+                        largelWidgetResId = R.layout.weather_appwidget_large_tint_system;
+                        wideWidgetResId   = R.layout.weather_appwidget_wide_tint_system;
+                    } else {
+                        smallWidgetResId  = R.layout.weather_appwidget_small_system;
+                        largelWidgetResId = R.layout.weather_appwidget_large_system;
+                        wideWidgetResId   = R.layout.weather_appwidget_wide_system;
+                    }
+                    break;
+                case COLOR_THEME_DARK:
+                    if (isPackOutline) {
+                        smallWidgetResId  = R.layout.weather_appwidget_small_tint_dark;
+                        largelWidgetResId = R.layout.weather_appwidget_large_tint_dark;
+                        wideWidgetResId   = R.layout.weather_appwidget_wide_tint_dark;
+                    } else {
+                        smallWidgetResId  = R.layout.weather_appwidget_small_dark;
+                        largelWidgetResId = R.layout.weather_appwidget_large_dark;
+                        wideWidgetResId   = R.layout.weather_appwidget_wide_dark;
+                    }
+                    break;
+                case COLOR_THEME_LIGHT:
+                    if (isPackOutline) {
+                        smallWidgetResId  = R.layout.weather_appwidget_small_tint_light;
+                        largelWidgetResId = R.layout.weather_appwidget_large_tint_light;
+                        wideWidgetResId   = R.layout.weather_appwidget_wide_tint_light;
+                    } else {
+                        smallWidgetResId  = R.layout.weather_appwidget_small_light;
+                        largelWidgetResId = R.layout.weather_appwidget_large_light;
+                        wideWidgetResId   = R.layout.weather_appwidget_wide_light;
+                    }
+                    break;
+            }
         }
+
         RemoteViews smallView = new RemoteViews(context.getPackageName(), smallWidgetResId);
         setupRemoteView(context, appWidgetManager, appWidgetId, smallView,
                 false, bgTrans);

@@ -83,4 +83,7 @@
     <string name="trans_solid">Solid</string>
     <string name="location_browse_activity_title">Select location</string>
     <string name="location_query_hint">Search for a location</string>
+    <string name="widget_style_title">Widget style</string>
+    <string name="widget_style_standard">Standard</string>
+    <string name="widget_style_clock">Clock</string>
 </resources>

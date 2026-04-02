@@ -19,6 +19,13 @@
     android:title="@string/weather_widget">
 
     <ListPreference
+        android:key="widget_style"
+        android:title="@string/widget_style_title"
+        android:entries="@array/widget_style_entries"
+        android:entryValues="@array/widget_style_values"
+        android:defaultValue="0" />
+
+    <ListPreference
         android:entries="@array/color_theme_entries"
         android:entryValues="@array/color_theme_values"
         android:key="color_theme"
